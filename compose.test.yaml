@@ -1,0 +1,44 @@
+services:
+  api-0:
+    environment:
+      DATABASE_URL: postgresql://spatial:${POSTGRES_PASSWORD:-local-test-password}@toxiproxy:15432/spatial
+    depends_on:
+      proxy-init: {condition: service_completed_successfully}
+  api-1:
+    environment:
+      DATABASE_URL: postgresql://spatial:${POSTGRES_PASSWORD:-local-test-password}@toxiproxy:15432/spatial
+    depends_on:
+      proxy-init: {condition: service_completed_successfully}
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.12.0
+  proxy-init:
+    build: .
+    command: ["python", "-m", "spatial_id.admin", "init-proxy"]
+    environment:
+      LAB_STATE: /results/lab.db
+    volumes: ["lab-results:/results"]
+    depends_on: [toxiproxy, db]
+  test-runner:
+    build: .
+    command: ["uvicorn", "spatial_id.test_lab:create_lab_app", "--factory", "--host", "0.0.0.0", "--port", "8090"]
+    environment:
+      TEST_TOKEN: ${TEST_TOKEN:?Set TEST_TOKEN in .env to enable the Test Lab}
+      API_TOKEN: ${API_TOKEN:-}
+      LAB_STATE: /results/lab.db
+    volumes: ["lab-results:/results"]
+    restart: unless-stopped
+    healthcheck: {disable: true}
+    depends_on:
+      proxy-init: {condition: service_completed_successfully}
+  watchdog:
+    build: .
+    command: ["python", "-m", "spatial_id.test_lab"]
+    environment:
+      LAB_STATE: /results/lab.db
+    volumes: ["lab-results:/results"]
+    restart: unless-stopped
+    healthcheck: {disable: true}
+    depends_on:
+      proxy-init: {condition: service_completed_successfully}
+volumes:
+  lab-results:

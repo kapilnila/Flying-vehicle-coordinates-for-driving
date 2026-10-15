@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "distributed-spatial-id"
+version = "0.3.0"
+description = "A restart-safe distributed 128-bit spatial event ID service"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "Spatial ID Project"}]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+service = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "httpx>=0.27,<1", "prometheus-client>=0.20,<1"]
+postgres = ["psycopg[binary,pool]>=3.2,<4"]
+
+[project.scripts]
+spatial-id = "spatial_id.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["spatial_id*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

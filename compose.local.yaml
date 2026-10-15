@@ -1,0 +1,17 @@
+name: spatial-id-local
+services:
+  api-0:
+    build: .
+    environment:
+      DATABASE_URL: sqlite:////data/state.db
+      WORKER_ID: '0'
+      API_TOKEN: ${API_TOKEN:-}
+    volumes: ["local-state:/data"]
+    stop_grace_period: 15s
+  gateway:
+    build: ./frontend
+    ports: ["127.0.0.1:${WEB_PORT:-8080}:80"]
+    volumes: ["./deploy/nginx.local.conf:/etc/nginx/conf.d/default.conf:ro"]
+    depends_on: [api-0]
+volumes:
+  local-state:

@@ -1,0 +1,78 @@
+name: spatial-id
+x-api: &api
+  build: .
+  restart: unless-stopped
+  stop_grace_period: 15s
+  depends_on:
+    migrate: {condition: service_completed_successfully}
+  environment: &environment
+    DATABASE_URL: postgresql://spatial:${POSTGRES_PASSWORD:-local-test-password}@db:5432/spatial
+    API_TOKEN: ${API_TOKEN:-}
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=2)"]
+    interval: 5s
+    timeout: 3s
+    retries: 5
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: spatial
+      POSTGRES_DB: spatial
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-test-password}
+    volumes: ["database:/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spatial -d spatial"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+  migrate:
+    build: .
+    command: ["python", "-m", "spatial_id.admin", "migrate"]
+    environment: *environment
+    depends_on:
+      db: {condition: service_healthy}
+  api-0:
+    <<: *api
+    environment:
+      <<: *environment
+      WORKER_ID: '0'
+  api-1:
+    <<: *api
+    environment:
+      <<: *environment
+      WORKER_ID: '1'
+  gateway:
+    build: ./frontend
+    ports: ["127.0.0.1:${WEB_PORT:-8080}:80"]
+    depends_on:
+      api-0: {condition: service_healthy}
+      api-1: {condition: service_healthy}
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    profiles: [monitoring]
+    volumes: ["./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+  integration:
+    build: .
+    profiles: [test]
+    command: ["python", "-m", "pytest", "tests", "-q", "-p", "no:cacheprovider"]
+    environment:
+      SPATIAL_TEST_URL: http://api-0:8080
+      SPATIAL_TEST_SECOND_URL: http://api-1:8080
+      API_TOKEN: ${API_TOKEN:-}
+    depends_on:
+      api-0: {condition: service_healthy}
+      api-1: {condition: service_healthy}
+  browser-tests:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.test
+    profiles: [test]
+    environment:
+      BASE_URL: http://gateway
+      TEST_TOKEN: ${TEST_TOKEN:-}
+    volumes: ["./frontend/test-results:/app/test-results"]
+    depends_on: [gateway]
+volumes:
+  database:
+

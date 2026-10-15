@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+.venv/
+.spatial-id/
+.env
+node_modules/
+frontend/dist/
+test-results/
+playwright-report/
+reports/
