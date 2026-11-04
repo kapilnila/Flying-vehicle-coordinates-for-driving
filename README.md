@@ -35,6 +35,7 @@ just packing fields into an integer.
 - Quantizes latitude, longitude, altitude, speed, and vehicle class into the ID.
 - Decodes IDs without requiring a database lookup.
 - Persists original event inputs and vehicle history after a durable commit.
+- Derives validated trajectories and A* routes without changing stored IDs.
 - Supports atomic batches of up to 1,000 IDs.
 - Makes retries repeatable across processes and restarts using idempotency keys.
 - Prevents stale workers from allocating IDs using leases and fencing tokens.
@@ -163,6 +164,7 @@ Detailed setup instructions, environment variables, and troubleshooting are in
 | Generate | Submit spatial fields and durable batches; copy or export IDs |
 | Decode | Inspect every encoded field and approximate spatial cell |
 | History | Search by vehicle and capture time, page results, inspect and export |
+| Paths | Validate 3D movement, explain discontinuities, and run A* routing |
 | Health | Compare API readiness, database state, latency, throughput and errors |
 | Test Lab | Run bounded load/fault scenarios, cancel, watch recovery, download reports |
 
@@ -262,21 +264,26 @@ the operator procedure in [Operations and recovery](docs/operations.md).
 
 The verified development run completed:
 
-- 72 Python unit, integration, crash, storage, and real-service tests on Linux.
-- 3 Chromium end-to-end dashboard tests.
+- 79 Python unit, integration, crash, storage, trajectory, and real-service tests on Linux.
+- 4 Chromium end-to-end dashboard tests.
 - Two-replica idempotency and client-disconnect checks.
 - Load, database-latency, database-disconnect, and cancellation scenarios.
 - Independent watchdog recovery while the Test Lab runner was paused.
 - PostgreSQL binary backup/restore and SQLite restart persistence.
 - Zero duplicate IDs in all measured benchmark and failure scenarios.
 
-Observed 1,000-ID smoke-test throughput on Docker Desktop/WSL2, using batch 100:
+Observed 10,000-ID smoke-test throughput on Docker Desktop/WSL2, using batch 100:
 
 | Mode | IDs/second | Durability |
 |---|---:|---|
-| Core library | 66,043 | In-memory only |
-| SQLite | 8,653 | WAL + FULL synchronization |
-| PostgreSQL | 2,830 | Synchronous commit through local proxy |
+| Core library in container | 40,558 | In-memory only |
+| SQLite | 6,498 | WAL + FULL synchronization |
+| PostgreSQL | 1,293 | Synchronous commit through local proxy |
+
+The raw Windows CLI generated 89,959 IDs/second with one thread. The complete
+Nginx → two API replicas → PostgreSQL path generated 2,393 IDs/second in
+100-ID batches with 16 concurrent clients. Every measured run returned zero
+duplicates; see the verification report for latency and environment details.
 
 These are small development samples, not capacity claims. Hardware, storage,
 concurrency, batch size, and network topology materially change results. Exact
@@ -307,6 +314,7 @@ Start with the [documentation index](docs/README.md).
 - [Architecture and guarantees](docs/architecture.md)
 - [Data model and lifecycle](docs/data-model.md)
 - [API and retry contract](docs/api.md)
+- [Trajectory and A* routing](docs/trajectory.md)
 - [Development guide](docs/development.md)
 - [Testing strategy](docs/testing.md)
 - [Operations and recovery](docs/operations.md)
@@ -321,8 +329,8 @@ Start with the [documentation index](docs/README.md).
 ## Scope and limitations
 
 This release intentionally does not include vehicle identity management,
-trajectories, previous/next links inside IDs, 3D velocity vectors, direction,
-maps, collision detection, navigation logic, public cloud deployment, offline
+persisted trajectory artifacts, previous/next links inside IDs, 3D velocity
+vectors, direction, maps, collision detection, navigation logic, public cloud deployment, offline
 synchronization, or a network SDK.
 
 PostgreSQL uses a single primary. Automatic failover, replication, multi-region

@@ -45,3 +45,20 @@ test('test lab launches a bounded run and exposes its report',async({page})=>{
  await expect(page.locator('.badge').filter({hasText:'completed'})).toBeVisible({timeout:20000});
  await expect(page.locator('pre')).toContainText('"duplicate_ids": 0');
 });
+
+test('trajectory screen connects valid events and reports an A star route',async({page,request})=>{
+ const vehicle=`PATH-${Date.now()}`;
+ for(const [index,point] of [[12.9716,77.5946],[12.9720,77.5950],[12.9724,77.5954]].entries()){
+  const response=await request.post('/v1/ids',{data:{vehicle_id:vehicle,latitude:point[0],longitude:point[1],altitude_m:120+index,speed_mps:10,captured_at_ms:1000+index*10000},headers:{'Idempotency-Key':`${vehicle}-${index}`}});
+  expect(response.ok()).toBeTruthy();
+ }
+ await page.goto('/');
+ await page.getByRole('button',{name:/Paths/}).first().click();
+ await page.getByLabel('Path vehicle').fill(vehicle);
+ await page.getByLabel('max_speed_mps').fill('20');
+ await page.getByRole('button',{name:'Build path →'}).click();
+ await expect(page.getByText('A* ROUTE FOUND')).toBeVisible();
+ await expect(page.getByText('Connected segments').locator('..').locator('strong')).toHaveText('2');
+ await expect(page.getByRole('img',{name:'Relative trajectory plot'})).toBeVisible();
+ await page.screenshot({path:'test-results/trajectory.png',fullPage:true});
+});

@@ -77,3 +77,23 @@ def test_deadline_retry_resolves_uncertain_commit(client,monkeypatch):
     retry=client.post("/v1/ids",json=P,headers={"Idempotency-Key":"deadline"})
     assert retry.status_code==200
     assert len(client.get("/v1/vehicles/demo/records").json()["items"])==1
+
+def test_trajectory_and_astar_route(client):
+    points=[(1000,12.9716,77.5946),(11000,12.9720,77.5950),(21000,12.9724,77.5954)]
+    ids=[]
+    for index,(stamp,lat,lon) in enumerate(points):
+        response=client.post("/v1/ids",json=dict(P,latitude=lat,longitude=lon,captured_at_ms=stamp),
+                             headers={"Idempotency-Key":f"path-{index}"})
+        assert response.status_code==201
+        ids.extend(response.json()["ids"])
+    trajectory=client.get("/v1/vehicles/demo/trajectory?max_speed_mps=20&max_distance_m=1000").json()
+    assert trajectory["summary"]["connected_segment_count"]==2
+    assert trajectory["points"][0]["id"]==ids[0]
+    truncated=client.get("/v1/vehicles/demo/trajectory?limit=2&max_speed_mps=20&max_distance_m=1000").json()
+    assert truncated["summary"]["point_count"]==2
+    assert truncated["summary"]["has_more_records"] is True
+    assert truncated["summary"]["truncated"] is True
+    route=client.get(f"/v1/vehicles/demo/route?start_id={ids[0]}&end_id={ids[-1]}&max_speed_mps=20&max_distance_m=1000")
+    assert route.status_code==200
+    assert route.json()["route"]["ids"]==ids
+    assert client.get("/v1/vehicles/demo/trajectory?limit=1").status_code==400

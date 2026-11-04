@@ -1,17 +1,18 @@
 # Verification report
 
-Executed locally on 14 October 2026. These are measured smoke-test results, not
+Executed locally through 21 October 2026. These are measured smoke-test results, not
 production capacity guarantees. No hosted CI execution is claimed.
 
 ## Executed checks
 
 | Check | Result |
 |---|---|
-| Windows Python 3.11 local suite | 69 passed; 3 live-service tests skipped |
-| Linux Python 3.12 full suite with real services | 72 passed, no skipped tests |
+| Windows Python 3.11 local suite | 76 passed; 3 live-service tests skipped |
+| Linux Python 3.12 full suite with real services | 79 passed, no skipped tests |
 | Real HTTP across two PostgreSQL-backed replicas | All skipped tests run separately: 3 passed, including client disconnect followed by retry |
-| Chromium browser acceptance | 3 passed: generation/retry/decode/history/reload; mobile disconnected health; Test Lab/report |
+| Chromium browser acceptance | 4 passed: generation/retry/decode/history/reload; mobile disconnected health; Test Lab/report; trajectory/A* path |
 | Frontend TypeScript and production build | Passed |
+| Trajectory validation | Haversine + altitude distance, every break reason, ordering, limits, API, and A* route passed |
 | npm dependency audit after Playwright update | Zero reported vulnerabilities |
 | API kill/restart and database restart | Passed on 13 October; acknowledged history and idempotent replay retained |
 | Bounded load, latency, disconnection, cancellation | All passed; fresh committed record retrieved after every scenario |
@@ -51,27 +52,45 @@ volume and can be downloaded in Test Lab.
 
 ## Benchmark results
 
-Docker Desktop / WSL2 Linux 6.6.87.2, Python 3.12.15, 1,000 IDs per mode,
-one benchmark producer, worker 999. SQLite uses WAL/FULL in a temporary local
-file; PostgreSQL uses synchronous commits through the fault-free local proxy.
-The database stores original records and idempotency responses in both modes.
-Memory mode is the non-durable library baseline. No artificial faults were active.
-The host also ran other containers; these are small, noisy development samples.
+Repeated on 21 October 2026 with no artificial faults. The raw CLI ran on
+Windows 10 build 26200 with Python 3.11.8. Durable benchmarks ran in Docker
+Desktop / WSL2 Linux 6.6.87.2 with Python 3.12.15. SQLite used WAL/FULL in a
+temporary file; PostgreSQL used synchronous commits through the fault-free
+local proxy. The host also ran the development containers, so these are noisy
+development measurements rather than production capacity guarantees.
 
-| Mode | Batch | IDs/sec | p50 batch ms | p95 batch ms | p99 batch ms |
+Raw generator, 100,000 IDs:
+
+| Threads | IDs/sec | Seconds | Duplicates |
+|---:|---:|---:|---:|
+| 1 | 89,959 | 1.112 | 0 |
+| 8 | 15,066 | 6.637 | 0 |
+
+The shared generator deliberately serializes timestamp and sequence allocation.
+On this workload, additional threads added lock and scheduling contention rather
+than throughput. Scale with distinct worker-owned processes instead of threads
+sharing one generator.
+
+Direct generation/storage, 10,000 IDs in 100-ID batches:
+
+| Mode | IDs/sec | p50 batch ms | p95 batch ms | p99 batch ms | Duplicates |
 |---|---:|---:|---:|---:|---:|
-| Core memory | 1 | 66,608 | 0.011 | 0.018 | 0.088 |
-| Core memory | 100 | 66,043 | 1.444 | 1.641 | 1.641 |
-| SQLite durable | 1 | 396 | 1.509 | 7.367 | 13.371 |
-| SQLite durable | 100 | 8,653 | 10.437 | 14.611 | 14.611 |
-| PostgreSQL durable | 1 | 62.6 | 14.663 | 23.630 | 38.046 |
-| PostgreSQL durable | 100 | 2,830 | 34.181 | 39.273 | 39.273 |
+| Core memory in container | 40,558 | 1.453 | 8.793 | 9.962 | 0 |
+| SQLite durable | 6,498 | 11.300 | 40.002 | 49.579 | 0 |
+| PostgreSQL durable | 1,293 | 75.033 | 103.829 | 120.517 | 0 |
 
-Every benchmark returned zero duplicates. Batching improved aggregate durable
-throughput about 22x for SQLite and 45x for PostgreSQL in these samples without
-weakening commit settings. Latencies are per batch, not per ID. Batch-100 runs
-have only ten samples: p99 is not a statistically reliable tail estimate.
-Repeat with at least 100,000 IDs for capacity planning.
+End-to-end through Nginx, two APIs and PostgreSQL, 16 concurrent clients:
+
+| Batch | Requests | IDs | IDs/sec | p50 request ms | p95 request ms | p99 request ms |
+|---:|---:|---:|---:|---:|---:|---:|
+| 10 | 1,000 | 10,000 | 494 | 272.506 | 544.659 | 1,418.148 |
+| 100 | 100 | 10,000 | 2,393 | 389.582 | 1,700.123 | 2,145.770 |
+
+Both HTTP runs returned every requested ID, zero duplicate IDs, zero failed
+requests, and only canonical 32-character IDs. Larger batches raised individual
+request latency but increased ID throughput about 4.8x by amortizing transaction
+and HTTP overhead. Concurrent request latency includes queueing. Repeat on target
+hardware with a longer warm-up and sustained run before capacity planning.
 
 ## Reproduce
 
@@ -87,7 +106,8 @@ docker compose -p spatial-id-acceptance -f compose.yaml -f compose.test.yaml --p
 .venv\Scripts\python -m scripts.watchdog_acceptance
 .venv\Scripts\python -m scripts.postgres_restore_test
 .venv\Scripts\python -m scripts.failure_test
-.venv\Scripts\python -m scripts.benchmark_storage --count 1000 --batch 100
+.venv\Scripts\python -m scripts.benchmark_storage --count 10000 --batch 100
+.venv\Scripts\python -m scripts.load_test --url http://127.0.0.1:18081/v1/ids --requests 1000 --concurrency 16 --batch 10
 ```
 
 For the PostgreSQL comparison, execute `scripts.benchmark_storage` inside api-0

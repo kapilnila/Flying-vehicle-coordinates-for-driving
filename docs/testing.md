@@ -10,11 +10,12 @@ tests prove behavior across real processes, networks, browsers, and PostgreSQL.
 |---|---|---|
 | Core unit | Masks, shifts, boundaries, decoding, clock/sequence behavior | `python -m pytest tests/test_core.py` |
 | Storage | Atomicity, leases, fencing, retries, history, migrations | `python -m pytest tests/test_storage.py` |
-| API | Strict JSON, auth, deadlines, overload, error shape | `python -m pytest tests/test_api.py` |
+| API | Strict JSON, auth, deadlines, overload, error shape, path routes | `python -m pytest tests/test_api.py` |
+| Trajectory | Haversine/3D distance, discontinuities, ordering, A* | `python -m pytest tests/test_trajectory.py` |
 | Crash | Exit before commit and after commit/before response | `python -m pytest tests/test_crashes.py` |
 | Test Lab | Bounds, reconciliation, one-run limit, watchdog expiry | `python -m pytest tests/test_lab.py` |
 | Live HTTP | Two replicas, retry contention, client disconnect | `python -m pytest tests/test_network.py` in Compose |
-| Browser | Complete journey, mobile failure state, lab report | Playwright container |
+| Browser | Complete journey, mobile failure state, lab report, trajectory | Playwright container |
 | Host failure | API kill/restart and PostgreSQL restart | `python -m scripts.failure_test` |
 | Recovery | Network faults, watchdog, backup/restore, SQLite restart | Acceptance scripts |
 
@@ -65,7 +66,8 @@ ignored by Git. Browser tests cover:
 
 - generation, identical retry, decode, history, latest record and reload;
 - mobile layout with disconnected health requests;
-- a bounded Test Lab run and zero-duplicate report.
+- a bounded Test Lab run and zero-duplicate report;
+- a three-event trajectory with two accepted segments and an A* route.
 
 ## Failure and recovery workflows
 

@@ -20,6 +20,7 @@
 | API process kill/database restart | Safe restart, history remains | Host failure script |
 | Runner unavailable during fault | Expiry watchdog restores network | Unit test plus live paused-runner scenario |
 | Late-arriving vehicle sample | Immutable record, deterministic query | History tests |
+| Impossible consecutive movement | Segment rejected with a stable reason; A* cannot cross it | Trajectory/API/browser tests |
 | Legacy state | Old timestamp is treated as consumed | Migration tests |
 | Backup restore | Records readable; generation requires safe time barrier | SQLite backup test + real PostgreSQL dump/restore |
 | Entire volume loss | Operator restore required | Documented limitation |

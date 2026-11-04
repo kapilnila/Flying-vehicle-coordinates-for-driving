@@ -72,6 +72,8 @@ time to advance. It does not split the batch or manufacture future time.
 | `GET /v1/vehicles/{vehicle}/records` | `limit` (1–1000), `cursor`, `from_ms`, `to_ms` |
 | `GET /v1/vehicles/{vehicle}/latest` | Greatest capture time, then ID |
 | `GET /v1/vehicles/{vehicle}/export` | Streaming JSONL in capture-time/ID order |
+| `GET /v1/vehicles/{vehicle}/trajectory` | Classify bounded consecutive path segments |
+| `GET /v1/vehicles/{vehicle}/route` | Run A* over accepted directed segments |
 
 History responses contain `items` and nullable `next_cursor`. Filters are
 inclusive. Export is not a snapshot; download failures must be retried and
@@ -142,6 +144,11 @@ GET /v1/vehicles/VEH-42/records?limit=100&from_ms=1790000000000&to_ms=1800000000
 The default limit is 100 and the maximum is 1,000. Follow `next_cursor` exactly;
 do not parse or modify it. Pagination is stable by `(captured_at_ms, id)`, but it
 is not a database snapshot: concurrent late inserts can affect later pages.
+
+Trajectory and route queries use independent `limit`, `max_gap_ms`,
+`max_speed_mps`, and `max_distance_m` controls plus optional inclusive capture
+filters. See [Trajectory construction and A* routing](trajectory.md) for formulas,
+decision order, defaults, result meanings, and complexity.
 
 ## Operations
 

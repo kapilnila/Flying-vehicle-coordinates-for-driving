@@ -85,6 +85,12 @@ Capture time is user-supplied event time; generation time is server time in the
 ID. Late events are stored without rewriting history. Cursor pages use
 `(captured_at_ms,id)` order and are not a snapshot during concurrent ingestion.
 
+Trajectories are bounded derived views over those immutable records. Consecutive
+capture-ordered points become candidate edges; Haversine ground distance,
+vertical distance, elapsed time, and implied speed decide whether each edge is
+accepted. A* operates only on accepted directed edges. No trajectory state or
+previous/next pointer is encoded into an ID. See [trajectory.md](trajectory.md).
+
 ## Limits
 
 Durability depends on the database and filesystem honoring commits. Backups from

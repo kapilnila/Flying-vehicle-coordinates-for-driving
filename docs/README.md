@@ -17,8 +17,9 @@ The root [README](../README.md) is the project overview and fastest demo path.
 
 1. [Getting started](getting-started.md) — install and run locally.
 2. [API contract](api.md) — inputs, outputs, retries, errors and pagination.
-3. [Development guide](development.md) — code layout and change workflow.
-4. [Data model](data-model.md) — persisted tables and event lifecycle.
+3. [Trajectory and A* routing](trajectory.md) — movement validation and path semantics.
+4. [Development guide](development.md) — code layout and change workflow.
+5. [Data model](data-model.md) — persisted tables and event lifecycle.
 
 ### Operator or reviewer
 
@@ -34,6 +35,7 @@ The root [README](../README.md) is the project overview and fastest demo path.
 | Bit allocation and uniqueness invariant | [architecture.md](architecture.md) |
 | Major tradeoffs and rejected alternatives | [design-decisions.md](design-decisions.md) |
 | HTTP request/response behavior | [api.md](api.md) |
+| Trajectory rules and A* heuristic | [trajectory.md](trajectory.md) |
 | Schema and record lifecycle | [data-model.md](data-model.md) |
 | Environment and first run | [getting-started.md](getting-started.md) |
 | Backup, restore and incident handling | [operations.md](operations.md) |

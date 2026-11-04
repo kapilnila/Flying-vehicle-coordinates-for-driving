@@ -39,22 +39,23 @@ def main() -> None:
         }
     ).encode()
 
-    def send(_: int) -> tuple[float, int, int]:
+    def send(_: int) -> tuple[float, int, list[str]]:
         request = Request(args.url, data=body, headers={"Content-Type": "application/json"})
         started = time.perf_counter()
         try:
             with urlopen(request, timeout=10) as response:
                 payload = json.load(response)
-                return time.perf_counter() - started, response.status, len(payload["ids"])
+                return time.perf_counter() - started, response.status, payload["ids"]
         except Exception:
-            return time.perf_counter() - started, 0, 0
+            return time.perf_counter() - started, 0, []
 
     started = time.perf_counter()
     with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
         results = list(pool.map(send, range(args.requests)))
     elapsed = time.perf_counter() - started
     latencies = [result[0] for result in results]
-    generated = sum(result[2] for result in results)
+    generated_ids = [value for result in results for value in result[2]]
+    generated = len(generated_ids)
     errors = sum(result[1] != 201 for result in results)
     print(
         json.dumps(
@@ -65,6 +66,10 @@ def main() -> None:
                 "elapsed_seconds": elapsed,
                 "request_rate": args.requests / elapsed,
                 "id_rate": generated / elapsed,
+                "requested_ids": args.requests * args.batch,
+                "received_ids": generated,
+                "duplicate_ids": generated - len(set(generated_ids)),
+                "canonical_width_valid": all(len(value) == 32 for value in generated_ids),
                 "errors": errors,
                 "latency_ms": {
                     "p50": percentile(latencies, 0.50) * 1000,

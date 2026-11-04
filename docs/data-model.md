@@ -8,6 +8,10 @@ a different SQLite volume so they remain available during PostgreSQL failures.
 
 The current schema version is 1.
 
+Trajectory support adds no tables. It derives a bounded graph from `records` at
+read time, so late events can change future adjacency without mutating existing
+IDs or rows. Persisting an auditable route artifact is outside the V1 schema.
+
 ```mermaid
 erDiagram
     ALLOCATIONS {

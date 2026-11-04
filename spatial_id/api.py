@@ -17,6 +17,7 @@ from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, gene
 from .core import decode
 from .errors import ClockRegressionError, MalformedIdError, SequenceExhaustedError, ValidationError, WorkerLeaseError
 from .storage import Conflict, Database, RecordStore, StorageUnavailable, json_text
+from .trajectory import astar_route, build_trajectory, trajectory_limits
 
 log = logging.getLogger(__name__)
 
@@ -181,6 +182,34 @@ def create_app(store=None, *, database_url=None, worker_id=None, token=None, ttl
     async def latest(vehicle: str):
         result = await read_operation(app.state.store.history, vehicle, 1, latest=True)
         return result["items"][0] if result["items"] else failure(404, "not_found", "vehicle has no records")
+
+    async def vehicle_trajectory(vehicle, limit, max_gap_ms, max_speed_mps, max_distance_m, from_ms, to_ms):
+        config = trajectory_limits(limit=limit, max_gap_ms=max_gap_ms,
+                                   max_speed_mps=max_speed_mps, max_distance_m=max_distance_m)
+        page = await read_operation(app.state.store.history, vehicle, config["limit"], None, from_ms, to_ms)
+        result = build_trajectory(page["items"], **config)
+        result["vehicle_id"] = vehicle
+        has_more_records = page["next_cursor"] is not None
+        result["summary"]["has_more_records"] = has_more_records
+        result["summary"]["truncated"] = has_more_records
+        return result
+
+    @app.get("/v1/vehicles/{vehicle}/trajectory")
+    async def trajectory(vehicle: str, limit: int = 1000, max_gap_ms: int = 300000,
+                         max_speed_mps: float = 100, max_distance_m: float = 50000,
+                         from_ms: int | None = None, to_ms: int | None = None):
+        return await vehicle_trajectory(vehicle, limit, max_gap_ms, max_speed_mps,
+                                        max_distance_m, from_ms, to_ms)
+
+    @app.get("/v1/vehicles/{vehicle}/route")
+    async def route(vehicle: str, start_id: str | None = None, end_id: str | None = None,
+                    limit: int = 1000, max_gap_ms: int = 300000,
+                    max_speed_mps: float = 100, max_distance_m: float = 50000,
+                    from_ms: int | None = None, to_ms: int | None = None):
+        result = await vehicle_trajectory(vehicle, limit, max_gap_ms, max_speed_mps,
+                                          max_distance_m, from_ms, to_ms)
+        return {"vehicle_id": vehicle, "route": astar_route(result, start_id, end_id),
+                "limits": result["limits"], "summary": result["summary"]}
 
     @app.get("/v1/vehicles/{vehicle}/export")
     async def export(vehicle: str):

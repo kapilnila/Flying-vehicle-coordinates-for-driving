@@ -42,7 +42,7 @@ outside the spatial-ID scope.
 ## Intentionally outside this project
 
 - Vehicle identity/authentication as a business domain.
-- Maps, route planning, trajectories, previous/next event links.
+- Maps, road/airspace-aware route planning, and previous/next links inside IDs.
 - Collision detection, flight control, navigation, or safety decisions.
 - Precise position recovery from the lossy ID.
 - 3D velocity vectors, direction, or mutable telemetry inside the identifier.
