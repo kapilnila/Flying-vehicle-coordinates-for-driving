@@ -13,8 +13,11 @@ GitHub Actions requests the public liveness endpoint every ten minutes.
    to this application, reachable from Render, with permission to create the
    application's tables on first startup. Use your provider's direct PostgreSQL
    connection or a session pooler and its required TLS settings.
-4. Render generates `API_TOKEN`. After deployment, copy it from the service's
-   environment settings and enter it in the dashboard's API token field.
+4. The Blueprint sets `PUBLIC_API=true`, enabling vehicle access without a token.
+   On an existing manually created service, set `PUBLIC_API=true` in Environment
+   and deploy the updated code. The dashboard hides its API token field.
+   To restore protected access, set `PUBLIC_API=false`, keep a nonempty
+   `API_TOKEN`, redeploy, and enter that token in the dashboard.
 5. For operator access, enter the separately generated `OPERATOR_TOKEN` under
    **History → Request log**. For an existing service, set a new, distinct secret
    in Render's environment settings if the token is missing.
@@ -24,7 +27,7 @@ GitHub Actions requests the public liveness endpoint every ten minutes.
 
 The free web-service plan is selected in the Blueprint. The database remains
 under your existing provider's billing and retention settings. The launcher
-requires PostgreSQL, a token, and a built dashboard before startup.
+requires PostgreSQL and a built dashboard. Protected mode also requires an API token.
 
 Render supplies `PORT`. The container runs one Uvicorn process and uses
 `WORKER_ID=auto`. During overlapping deployments, each instance claims its own
@@ -37,9 +40,9 @@ the chosen ID for that process. Fixed `WORKER_ID` values continue to use exclusi
 leases, including when they share a database with automatic instances.
 
 The hosted dashboard displays one backend and hides the Test Lab controls.
-Dashboard assets and health endpoints are publicly accessible. Vehicle APIs and
-statistics require the shared API token. This deployment supports trusted users
-sharing that token. Separate customer accounts require additional access controls.
+Dashboard assets and health endpoints are publicly accessible. With `PUBLIC_API=true`,
+visitors can generate, read, and export vehicle data and view statistics. Request
+logs require the separate operator token in both modes.
 
 For optional Google Maps, add `VITE_GOOGLE_MAPS_API_KEY` to the Render service's
 environment and rebuild. Restrict this browser key to the deployed website

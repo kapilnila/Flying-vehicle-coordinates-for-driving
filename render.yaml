@@ -7,6 +7,8 @@ services:
     dockerContext: .
     healthCheckPath: /readyz
     envVars:
+      - key: PUBLIC_API
+        value: "true"
       - key: DATABASE_URL
         sync: false
       - key: API_TOKEN

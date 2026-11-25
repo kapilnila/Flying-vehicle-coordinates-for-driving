@@ -41,12 +41,13 @@ def create_app(store=None, *, database_url=None, worker_id=None, token=None, ttl
     started = time.monotonic()
     stats = {"requests": 0, "errors": 0, "generated": 0, "replays": 0}
     api_token = token if token is not None else os.getenv("API_TOKEN", "")
+    public_api = os.getenv("PUBLIC_API", "").strip().lower() == "true"
     operator_token = operator_token if operator_token is not None else os.getenv("OPERATOR_TOKEN", "")
     operator_path = "/v1/operator/request-logs"
     frontend = frontend_dir or os.getenv("FRONTEND_DIST")
     if frontend:
         frontend = Path(frontend).resolve()
-        if not api_token:
+        if not api_token and not public_api:
             raise ValueError("API_TOKEN is required when serving the hosted dashboard")
         if not (frontend / "index.html").is_file() or not (frontend / "assets").is_dir():
             raise ValueError("FRONTEND_DIST must contain the built dashboard")
@@ -102,6 +103,11 @@ def create_app(store=None, *, database_url=None, worker_id=None, token=None, ttl
             if not operator_token or operator_token == api_token:
                 return failure(403, "operator_disabled", "configure a distinct operator token to view request logs")
             required_token = operator_token
+        elif request.url.path == "/v1/config":
+            required_token = None
+        elif public_api and (request.url.path == "/stats" or request.url.path.split("/")[:3] in (
+                ["", "v1", "ids"], ["", "v1", "records"], ["", "v1", "vehicles"])):
+            required_token = None
         elif not public_asset and request.url.path not in ("/livez", "/readyz", "/healthz", "/metrics"):
             required_token = api_token
         else:
@@ -282,6 +288,10 @@ def create_app(store=None, *, database_url=None, worker_id=None, token=None, ttl
     async def request_points(request_id: str):
         items = await read_operation(app.state.request_log.points, request_id)
         return {"items": items} if items else failure(404, "not_found", "no saved points for this request")
+
+    @app.get("/v1/config")
+    async def configuration():
+        return {"public_api": public_api}
 
     @app.get("/livez")
     async def live():

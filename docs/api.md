@@ -4,13 +4,17 @@ All IDs are canonical 32-character lowercase hexadecimal strings. Decoded
 128-bit decimal values are strings in HTTP JSON. Server errors have
 `{"error":{"code":"...","message":"..."}}` form.
 
-The examples assume `http://localhost:8080`. When `API_TOKEN` is configured,
+The examples assume `http://localhost:8080`. When `PUBLIC_API` is disabled and `API_TOKEN` is configured,
 send `Authorization: Bearer <API_TOKEN>` on vehicle routes and `/stats`. The
 operator log uses its own credential. Health checks and metrics are public.
 
 With `FRONTEND_DIST` configured, the service also serves the built dashboard at
 `/` and its assets at `/assets/`. These GET/HEAD routes are public. Hosted
-dashboard mode requires `API_TOKEN`; vehicle and statistics routes require it.
+dashboard mode requires `API_TOKEN` unless `PUBLIC_API=true`. Public mode permits
+vehicle operations and statistics without credentials. Operator logs always
+require their separate token.
+`GET /v1/config` is public and returns `{"public_api": true}` or
+`{"public_api": false}`. The dashboard uses it to show or hide the API token field.
 `WORKER_ID=auto` selects an available worker lease during startup.
 
 ## Generate
