@@ -15,7 +15,10 @@ GitHub Actions requests the public liveness endpoint every ten minutes.
    connection or a session pooler and its required TLS settings.
 4. Render generates `API_TOKEN`. After deployment, copy it from the service's
    environment settings and enter it in the dashboard's API token field.
-5. Visit the Render URL. Verify `/livez` returns `{"status":"alive"}` and
+5. For operator access, enter the separately generated `OPERATOR_TOKEN` under
+   **History → Request log**. For an existing service, set a new, distinct secret
+   in Render's environment settings if the token is missing.
+6. Visit the Render URL. Verify `/livez` returns `{"status":"alive"}` and
    `/readyz` returns HTTP 200. Generate a record through the dashboard and retrieve
    it from History.
 

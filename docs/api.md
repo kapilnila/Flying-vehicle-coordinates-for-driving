@@ -5,8 +5,8 @@ All IDs are canonical 32-character lowercase hexadecimal strings. Decoded
 `{"error":{"code":"...","message":"..."}}` form.
 
 The examples assume `http://localhost:8080`. When `API_TOKEN` is configured,
-send `Authorization: Bearer <token>` on every route except `/livez`, `/readyz`,
-`/healthz`, and `/metrics`. JSON responses include `Cache-Control: no-store`.
+send `Authorization: Bearer <API_TOKEN>` on vehicle routes and `/stats`. The
+operator log uses its own credential. Health checks and metrics are public.
 
 With `FRONTEND_DIST` configured, the service also serves the built dashboard at
 `/` and its assets at `/assets/`. These GET/HEAD routes are public. Hosted
@@ -232,3 +232,24 @@ HTTP calls already in flight can take up to two seconds beyond the load window.
 `POST /test-api/runs/{id}/cancel` cancels and restores connectivity;
 `GET /test-api/runs/{id}/report` downloads the report. All require the separate
 test bearer token. Targets and commands cannot be supplied by the caller.
+## Vehicle request log
+
+The managed API returns a server-generated `X-Request-ID` on each vehicle API
+attempt. In **History → Request log**, enter the operator token to search the past
+90 days. Each retry has its own request ID. Successful submissions and replays
+link to the same immutable batch, even without a vehicle ID.
+
+Use `Authorization: Bearer <OPERATOR_TOKEN>` on these endpoints. Set the token to
+a value distinct from `API_TOKEN`. Access is disabled when it is missing or equal.
+
+| Endpoint | Result |
+| --- | --- |
+| `GET /v1/operator/request-logs` | Newest first, with `items` and `next_cursor`. Supports `request_id`, `vehicle_id`, `status`, inclusive `from_ms` and `to_ms` (UTC epoch milliseconds), `cursor`, and `limit` (1–100, default 25). |
+| `GET /v1/operator/request-logs/{request_id}/points` | Original saved points for a successful submission or replay. Returns 404 if the attempt has expired or has no linked batch. |
+
+Logging starts at rollout. Vehicle requests reaching the application are recorded,
+including failed attempts. Health probes, dashboard assets, and operator searches
+are excluded. The database log stores route templates and metadata, with no raw
+headers, query strings, or request bodies. Background cleanup removes expired
+entries in batches. Vehicle records keep their existing lifetime. If a log write
+fails, a server warning includes the request ID and the vehicle response proceeds.
