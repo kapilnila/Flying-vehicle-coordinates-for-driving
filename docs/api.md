@@ -18,6 +18,9 @@ send `Authorization: Bearer <token>` on every route except `/livez`, `/readyz`,
 
 The four spatial/speed fields are required numbers. Optional class defaults to
 0, count to 1 (maximum 1000), vehicle to null, and capture time to receipt time.
+`altitude_reference` optionally accepts `"msl"` (metres above mean sea level)
+or `"unknown"`. Omitted references and existing records are read as unknown.
+Record, history, latest, export, and trajectory responses include the reference.
 `captured_at_ms` is a nonnegative integer Unix timestamp. Unknown fields, repeated
 JSON keys, numeric strings, NaN/Infinity, booleans in numeric fields, and invalid
 ranges are rejected. Body limit: 64 KiB.
@@ -55,6 +58,11 @@ values normalize to floating point; omitted `vehicle_class`, `count`,
 Changing any input creates a different logical request and must use a new key.
 Object member order and insignificant JSON whitespace do not change identity.
 
+Omitted and explicit `"unknown"` altitude references normalize to the original
+request representation. This preserves stored fingerprints and retries from
+before altitude references were added. Changing the reference to `"msl"`
+changes the fingerprint.
+
 ### Atomic batch semantics
 
 One request produces one transaction. Either every ID and record is committed
@@ -78,6 +86,13 @@ time to advance. It does not split the batch or manufacture future time.
 History responses contain `items` and nullable `next_cursor`. Filters are
 inclusive. Export is not a snapshot; download failures must be retried and
 partial files discarded. Vehicle identifiers should be URL-encoded.
+
+The trajectory endpoint accepts `window=earliest|latest`, defaulting to
+`earliest`. Latest selects the newest `limit` records by
+`(captured_at_ms, id)` after applying time filters, then returns them in
+ascending order. Its `has_more_records` and `truncated` flags indicate older
+matching history outside that window. The live console uses
+`window=latest&limit=100` every five seconds.
 
 ### Decode response
 

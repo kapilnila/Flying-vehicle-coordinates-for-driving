@@ -97,3 +97,57 @@ def test_trajectory_and_astar_route(client):
     assert route.status_code==200
     assert route.json()["route"]["ids"]==ids
     assert client.get("/v1/vehicles/demo/trajectory?limit=1").status_code==400
+
+
+def test_latest_trajectory_window_and_late_arrivals(client):
+    store = client.app.state.store
+    for stamp in range(1, 106):
+        store.generate(dict(P, captured_at_ms=stamp * 1000))
+    url = "/v1/vehicles/demo/trajectory?limit=100"
+    historical = client.get(url).json()
+    recent = client.get(url + "&window=latest").json()
+    assert [p["captured_at_ms"] for p in historical["points"]] == list(range(1000, 101000, 1000))
+    assert [p["captured_at_ms"] for p in recent["points"]] == list(range(6000, 106000, 1000))
+    assert recent["summary"]["has_more_records"] is True
+    newest = recent["points"][-1]["id"]
+    store.generate(dict(P, captured_at_ms=103500))
+    updated = client.get(url + "&window=latest").json()
+    assert updated["points"][-1]["id"] == newest
+    assert any(p["captured_at_ms"] == 103500 for p in updated["points"])
+    filtered = client.get(url + "&window=latest&from_ms=103000&to_ms=104000").json()
+    assert [p["captured_at_ms"] for p in filtered["points"]] == [103000, 103500, 104000]
+    assert filtered["summary"]["has_more_records"] is False
+    assert client.get(url + "&window=invalid").status_code == 400
+    assert client.get("/v1/vehicles/empty/trajectory?window=latest").json()["points"] == []
+
+
+def test_latest_window_tie_break_and_single_point(client):
+    response = client.post("/v1/ids", json=dict(P, captured_at_ms=1000, count=4))
+    ids = response.json()["ids"]
+    result = client.get("/v1/vehicles/demo/trajectory?window=latest&limit=2").json()
+    assert [p["id"] for p in result["points"]] == sorted(ids)[-2:]
+    assert result["segments"][0]["reason"] == "non_positive_time"
+    client.post("/v1/ids", json=dict(P, vehicle_id="single"))
+    assert len(client.get("/v1/vehicles/single/trajectory?window=latest").json()["points"]) == 1
+
+
+@pytest.mark.parametrize("reference", ["msl", "unknown"])
+def test_altitude_reference_in_record_views(client, reference):
+    payload = dict(P, altitude_reference=reference)
+    headers = {"Idempotency-Key": "reference"}
+    response = client.post("/v1/ids", json=payload, headers=headers)
+    assert response.status_code == 201
+    value = response.json()["ids"][0]
+    assert client.post("/v1/ids", json=payload, headers=headers).json() == response.json()
+    assert client.get(f"/v1/records/{value}").json()["altitude_reference"] == reference
+    assert client.get("/v1/vehicles/demo/latest").json()["altitude_reference"] == reference
+    assert client.get("/v1/vehicles/demo/records").json()["items"][0]["altitude_reference"] == reference
+    assert client.get("/v1/vehicles/demo/trajectory").json()["points"][0]["altitude_reference"] == reference
+    assert f'"altitude_reference":"{reference}"' in client.get("/v1/vehicles/demo/export").text
+    other = "unknown" if reference == "msl" else "msl"
+    assert client.post("/v1/ids", json=dict(payload, altitude_reference=other), headers=headers).status_code == 409
+
+
+@pytest.mark.parametrize("reference", [None, True, 42, "gps", "", ["msl"], {"msl": True}])
+def test_invalid_altitude_reference(client, reference):
+    assert client.post("/v1/ids", json=dict(P, altitude_reference=reference)).status_code == 400

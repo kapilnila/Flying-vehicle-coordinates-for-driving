@@ -4,6 +4,7 @@ test('generate, decode, retrieve history, and retry without duplicates',async({p
  await page.screenshot({path:'test-results/dashboard.png',fullPage:true});
  const vehicle=`E2E-${Date.now()}`;
  await page.getByLabel('vehicle_id',{exact:true}).fill(vehicle);
+ await page.getByLabel('altitude_reference',{exact:true}).selectOption('msl');
  await page.getByRole('button',{name:'Generate IDs →'}).click();
  await expect(page.getByRole('status')).toContainText('Committed');
  const first=await page.locator('.id-item').first().innerText();
@@ -16,6 +17,7 @@ test('generate, decode, retrieve history, and retry without duplicates',async({p
  await expect(page.locator('tbody tr')).toHaveCount(1);
  await page.getByRole('button',{name:'Latest record'}).click();
  await expect(page.locator('pre')).toContainText(vehicle);
+ await expect(page.locator('pre')).toContainText('"altitude_reference": "msl"');
  await page.reload();
  await page.getByRole('button',{name:/History/}).first().click();
  await page.getByLabel('History vehicle').fill(vehicle);

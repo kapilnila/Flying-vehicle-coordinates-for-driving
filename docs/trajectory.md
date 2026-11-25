@@ -93,6 +93,10 @@ without mixing path semantics into ID generation.
 
 ## API
 
+For live tracking, append `window=latest&limit=100` to the trajectory request.
+This selects the newest records before constructing the ascending path.
+The default `window=earliest` retains the historical selection behavior.
+
 Build the bounded trajectory:
 
 ```http
@@ -149,3 +153,45 @@ Previous/next links would make IDs depend on arrival order and would break when
 a late event belongs between two existing records. Paths are mutable business
 interpretations; identifiers are immutable allocation results. Keeping them
 separate allows multiple policies to analyze the same records safely.
+
+## Optional live map
+
+In **Paths**, choose **Live map** to follow one vehicle. **Path analysis** is
+the initial view. Live mode uses original record coordinates, refreshes every
+five seconds, and draws the latest 100 points with gaps at rejected segments.
+The marker follows capture-time order, including the ID tie-breaker. Failed
+refreshes retain the last observed position and its increasing capture age.
+Switching views stops the live polling.
+
+The relative coordinate plot works with the vehicle API alone. To add the Google
+basemap, optionally enable Maps JavaScript API and Elevation API in a
+billing-enabled Google Cloud project. Create a browser key with website
+restrictions for the console's exact origins, including the development origin
+when needed, and API restrictions for those two APIs. Put the key in the root
+`.env` as `VITE_GOOGLE_MAPS_API_KEY=...`. Restart Vite or rebuild the Compose
+gateway. The key is included in the browser bundle, so its website and API
+restrictions are required. See [Google's setup guide](https://developers.google.com/maps/documentation/javascript/get-api-key).
+
+Google loads when live mode has vehicle coordinates to display. A missing key,
+loading timeout, or authorization failure shows the coordinate plot. The map
+follows the latest position at a starting zoom of 15. Choose **Path analysis**
+to close it.
+
+**Show terrain elevation** is a separate opt-in control. It requests terrain
+at the current position immediately and then at most once every 30 seconds as
+the position changes. The readout includes the sampled coordinates and lookup
+time. A new vehicle coordinate shows an unavailable height estimate until its
+own terrain reading arrives. Successful terrain at an identical coordinate can
+serve subsequent altitude samples during the current display session.
+
+For `altitude_reference="msl"`, estimated height above terrain equals
+`altitude_m - terrain_elevation_m`. An unknown reference displays reported
+altitude and terrain separately. A failed terrain lookup clears the estimate
+and retries after the interval. Google terrain is held only for the active
+display. Map loading and elevation calls may incur charges, so configure usage
+quotas in Google Cloud. See [Elevation Service](https://developers.google.com/maps/documentation/javascript/elevation)
+and [usage and billing](https://developers.google.com/maps/documentation/elevation/usage-and-billing).
+
+Keep Google Maps attribution visible. Before public deployment, publish the
+Terms of Use and Privacy Policy required by Google's
+[Elevation policies](https://developers.google.com/maps/documentation/elevation/policies).

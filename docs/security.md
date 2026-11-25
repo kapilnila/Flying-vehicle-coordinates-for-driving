@@ -18,6 +18,13 @@ an access-controlled lookup layer when this disclosure is unacceptable.
 
 ## Trust boundaries
 
+The optional live map loads Google's browser SDK. Enabling terrain additionally
+sends the sampled latitude and longitude to Google. Vehicle IDs, capture times,
+API bearer tokens, and immutable records are fetched through the existing
+authenticated vehicle API. The map's browser key is public bundle configuration
+and must have website and API restrictions. Both live mode and terrain are
+opt-in controls.
+
 ```mermaid
 flowchart LR
     User -->|loopback HTTP| Gateway[Nginx]

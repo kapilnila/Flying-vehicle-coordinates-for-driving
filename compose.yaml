@@ -43,7 +43,10 @@ services:
       <<: *environment
       WORKER_ID: '1'
   gateway:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
     ports: ["127.0.0.1:${WEB_PORT:-8080}:80"]
     depends_on:
       api-0: {condition: service_healthy}

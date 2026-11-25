@@ -164,7 +164,7 @@ Detailed setup instructions, environment variables, and troubleshooting are in
 | Generate | Submit spatial fields and durable batches; copy or export IDs |
 | Decode | Inspect every encoded field and approximate spatial cell |
 | History | Search by vehicle and capture time, page results, inspect and export |
-| Paths | Validate 3D movement, explain discontinuities, and run A* routing |
+| Paths | Analyze trajectories or optionally follow a vehicle on a live map |
 | Health | Compare API readiness, database state, latency, throughput and errors |
 | Test Lab | Run bounded load/fault scenarios, cancel, watch recovery, download reports |
 
@@ -330,7 +330,7 @@ Start with the [documentation index](docs/README.md).
 
 This release intentionally does not include vehicle identity management,
 persisted trajectory artifacts, previous/next links inside IDs, 3D velocity
-vectors, direction, maps, collision detection, navigation logic, public cloud deployment, offline
+vectors, direction, collision detection, navigation logic, public cloud deployment, offline
 synchronization, or a network SDK.
 
 PostgreSQL uses a single primary. Automatic failover, replication, multi-region

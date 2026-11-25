@@ -62,6 +62,7 @@ def build_trajectory(records: list[dict], *, limit=1000, max_gap_ms=300_000,
             "latitude": record["latitude"],
             "longitude": record["longitude"],
             "altitude_m": record["altitude_m"],
+            "altitude_reference": record.get("altitude_reference", "unknown"),
             "speed_mps": record["speed_mps"],
         }
         for record in ordered

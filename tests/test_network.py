@@ -9,6 +9,26 @@ URL=os.getenv("SPATIAL_TEST_URL")
 SECOND=os.getenv("SPATIAL_TEST_SECOND_URL",URL)
 pytestmark=pytest.mark.skipif(not URL,reason="requires running HTTP service (Docker integration profile)")
 
+
+def test_latest_window_and_altitude_reference_across_replicas():
+    vehicle = uuid.uuid4().hex
+    headers = {"Authorization": "Bearer " + os.getenv("API_TOKEN", "")} if os.getenv("API_TOKEN") else {}
+    payload = dict(latitude=12.97, longitude=77.59, altitude_m=950, speed_mps=10, vehicle_id=vehicle)
+    with httpx.Client(timeout=10, headers=headers) as client:
+        history_key = {"Idempotency-Key": vehicle + "-legacy"}
+        old_payload = dict(payload, captured_at_ms=1000, count=101)
+        assert client.post(URL + "/v1/ids", json=old_payload, headers=history_key).status_code == 201
+        replay = client.post(SECOND + "/v1/ids", json=dict(old_payload, altitude_reference="unknown"), headers=history_key)
+        assert replay.status_code == 200
+        newest = client.post(URL + "/v1/ids", json=dict(payload, captured_at_ms=3000, altitude_reference="msl")).json()["ids"][0]
+        assert client.post(SECOND + "/v1/ids", json=dict(payload, captured_at_ms=2000)).status_code == 201
+        result = client.get(SECOND + f"/v1/vehicles/{vehicle}/trajectory?window=latest&limit=100").json()
+        assert len(result["points"]) == 100
+        assert result["points"][-1]["id"] == newest
+        assert result["points"][-1]["altitude_reference"] == "msl"
+        assert result["points"][-2]["altitude_reference"] == "unknown"
+        assert result["summary"]["has_more_records"] is True
+
 def test_two_replica_history_and_idempotency():
     key=uuid.uuid4().hex
     headers={"Authorization":"Bearer "+os.getenv("API_TOKEN", "")} if os.getenv("API_TOKEN") else {}

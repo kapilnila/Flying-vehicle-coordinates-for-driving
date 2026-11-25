@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import time
+from typing import Literal
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
@@ -183,10 +184,10 @@ def create_app(store=None, *, database_url=None, worker_id=None, token=None, ttl
         result = await read_operation(app.state.store.history, vehicle, 1, latest=True)
         return result["items"][0] if result["items"] else failure(404, "not_found", "vehicle has no records")
 
-    async def vehicle_trajectory(vehicle, limit, max_gap_ms, max_speed_mps, max_distance_m, from_ms, to_ms):
+    async def vehicle_trajectory(vehicle, limit, max_gap_ms, max_speed_mps, max_distance_m, from_ms, to_ms, latest=False):
         config = trajectory_limits(limit=limit, max_gap_ms=max_gap_ms,
                                    max_speed_mps=max_speed_mps, max_distance_m=max_distance_m)
-        page = await read_operation(app.state.store.history, vehicle, config["limit"], None, from_ms, to_ms)
+        page = await read_operation(app.state.store.history, vehicle, config["limit"], None, from_ms, to_ms, latest=latest)
         result = build_trajectory(page["items"], **config)
         result["vehicle_id"] = vehicle
         has_more_records = page["next_cursor"] is not None
@@ -197,9 +198,10 @@ def create_app(store=None, *, database_url=None, worker_id=None, token=None, ttl
     @app.get("/v1/vehicles/{vehicle}/trajectory")
     async def trajectory(vehicle: str, limit: int = 1000, max_gap_ms: int = 300000,
                          max_speed_mps: float = 100, max_distance_m: float = 50000,
-                         from_ms: int | None = None, to_ms: int | None = None):
+                         from_ms: int | None = None, to_ms: int | None = None,
+                         window: Literal["earliest", "latest"] = "earliest"):
         return await vehicle_trajectory(vehicle, limit, max_gap_ms, max_speed_mps,
-                                        max_distance_m, from_ms, to_ms)
+                                        max_distance_m, from_ms, to_ms, latest=window == "latest")
 
     @app.get("/v1/vehicles/{vehicle}/route")
     async def route(vehicle: str, start_id: str | None = None, end_id: str | None = None,

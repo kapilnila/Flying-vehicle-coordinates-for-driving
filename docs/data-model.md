@@ -12,6 +12,11 @@ Trajectory support adds no tables. It derives a bounded graph from `records` at
 read time, so late events can change future adjacency without mutating existing
 IDs or rows. Persisting an auditable route artifact is outside the V1 schema.
 
+The event payload can include `altitude_reference="msl"`. Omitted or
+`"unknown"` references use the legacy persisted representation and request
+fingerprint. Readers supply `"unknown"` for existing records. This metadata
+fits within schema version 1 and uses the existing ID allocation path.
+
 ```mermaid
 erDiagram
     ALLOCATIONS {

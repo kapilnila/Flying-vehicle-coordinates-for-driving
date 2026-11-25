@@ -68,6 +68,9 @@ ignored by Git. Browser tests cover:
 - mobile layout with disconnected health requests;
 - a bounded Test Lab run and zero-duplicate report;
 - a three-event trajectory with two accepted segments and an A* route.
+- optional live map, keyless fallback, capture age, late samples, and view cleanup;
+- mocked Google map failures, terrain throttling, altitude references, and
+  coordinate-matched height estimates. Browser tests block real Google requests.
 
 ## Failure and recovery workflows
 

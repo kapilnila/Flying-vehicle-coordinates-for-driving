@@ -204,10 +204,16 @@ class RecordStore:
             self.db.close()
 
     def generate(self, payload, key=None):
-        fields = {"latitude", "longitude", "altitude_m", "speed_mps", "vehicle_class", "count", "vehicle_id", "captured_at_ms"}
+        fields = {"latitude", "longitude", "altitude_m", "altitude_reference", "speed_mps", "vehicle_class", "count", "vehicle_id", "captured_at_ms"}
         if not isinstance(payload, dict) or set(payload) - fields:
             raise ValidationError("expected an object containing only supported fields")
         normalized = dict(payload)
+        reference = normalized.get("altitude_reference", "unknown")
+        if reference not in ("unknown", "msl"):
+            raise ValidationError("altitude_reference must be unknown or msl")
+        if reference == "unknown":
+            # Keep the canonical request identical to submissions made before this field existed.
+            normalized.pop("altitude_reference", None)
         for name in ("latitude", "longitude", "altitude_m", "speed_mps"):
             if name not in payload or type(payload[name]) not in (int, float):
                 raise ValidationError(f"{name} must be a number")
@@ -295,10 +301,16 @@ class RecordStore:
             self._owned(c)
             return response, False
 
+    @staticmethod
+    def _read_record(payload):
+        record = json.loads(payload)
+        record.setdefault("altitude_reference", "unknown")
+        return record
+
     def record(self, value):
         with self.db.connection() as c:
             row = self.db.execute(c, "SELECT payload FROM records WHERE id=?", (value,)).fetchone()
-        return json.loads(row[0]) if row else None
+        return self._read_record(row[0]) if row else None
 
     def history(self, vehicle, limit=100, cursor=None, start=None, end=None, latest=False):
         if type(limit) is not int or not 1 <= limit <= 1000:
@@ -323,7 +335,7 @@ class RecordStore:
         args.append(limit + 1)
         with self.db.connection() as c:
             rows = self.db.execute(c, f"SELECT payload FROM records WHERE {' AND '.join(clauses)} ORDER BY captured_at_ms {order}, id {order} LIMIT ?", args).fetchall()
-        items = [json.loads(r[0]) for r in rows[:limit]]
+        items = [self._read_record(r[0]) for r in rows[:limit]]
         next_cursor = None
         if len(rows) > limit and items:
             last = items[-1]

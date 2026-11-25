@@ -40,6 +40,27 @@ def test_conflicting_key(store):
     with pytest.raises(Conflict):
         store.generate(dict(PAYLOAD, speed_mps=5), "same")
 
+
+def test_legacy_altitude_retry_fingerprint_and_records(store):
+    import hashlib
+    import json
+
+    original = dict(PAYLOAD, count=1, vehicle_class=0, captured_at_ms=None)
+    for field in ("latitude", "longitude", "altitude_m", "speed_mps"):
+        original[field] = float(original[field])
+    # Reproduce the pre-altitude_reference canonical fingerprint.
+    canonical = json.dumps(original, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    expected = hashlib.sha256(canonical.encode()).hexdigest()
+    result, _ = store.generate(PAYLOAD, "legacy-altitude")
+    with store.db.connection() as connection:
+        fingerprint = store.db.execute(connection, "SELECT fingerprint FROM requests WHERE request_key=?", ("legacy-altitude",)).fetchone()[0]
+        persisted = store.db.execute(connection, "SELECT payload FROM records WHERE id=?", (result["ids"][0],)).fetchone()[0]
+    assert fingerprint == expected
+    assert "altitude_reference" not in json.loads(persisted)
+    assert store.record(result["ids"][0])["altitude_reference"] == "unknown"
+    assert store.generate(PAYLOAD, "legacy-altitude") == (result, True)
+    assert store.generate(dict(PAYLOAD, altitude_reference="unknown"), "legacy-altitude") == (result, True)
+
 def test_concurrent_retries(store):
     with ThreadPoolExecutor(max_workers=8) as pool:
         results = list(pool.map(lambda _: store.generate(dict(PAYLOAD, count=10), "shared"), range(20)))
