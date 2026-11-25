@@ -8,22 +8,26 @@ import hmac
 import json
 import logging
 import os
+from pathlib import Path
 import time
 from typing import Literal
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi import FastAPI, Query, Request
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
 
 from .core import decode
 from .errors import ClockRegressionError, MalformedIdError, SequenceExhaustedError, ValidationError, WorkerLeaseError
-from .storage import Conflict, Database, RecordStore, StorageUnavailable, json_text
+from .request_log import RequestLog, VehicleRequestLogging
+from .storage import Conflict, Database, RecordStore, StorageUnavailable, json_text, valid_vehicle_id
 from .trajectory import astar_route, build_trajectory, trajectory_limits
 
 log = logging.getLogger(__name__)
 
 
-def create_app(store=None, *, database_url=None, worker_id=None, token=None, ttl_ms=30000, max_batch=1000):
+def create_app(store=None, *, database_url=None, worker_id=None, token=None, ttl_ms=30000, max_batch=1000,
+               frontend_dir=None, operator_token=None):
     if type(max_batch) is not int or not 1 <= max_batch <= 1000:
         raise ValidationError("max_batch must be between 1 and 1000")
     registry = CollectorRegistry()
@@ -37,6 +41,15 @@ def create_app(store=None, *, database_url=None, worker_id=None, token=None, ttl
     started = time.monotonic()
     stats = {"requests": 0, "errors": 0, "generated": 0, "replays": 0}
     api_token = token if token is not None else os.getenv("API_TOKEN", "")
+    operator_token = operator_token if operator_token is not None else os.getenv("OPERATOR_TOKEN", "")
+    operator_path = "/v1/operator/request-logs"
+    frontend = frontend_dir or os.getenv("FRONTEND_DIST")
+    if frontend:
+        frontend = Path(frontend).resolve()
+        if not api_token:
+            raise ValueError("API_TOKEN is required when serving the hosted dashboard")
+        if not (frontend / "index.html").is_file() or not (frontend / "assets").is_dir():
+            raise ValueError("FRONTEND_DIST must contain the built dashboard")
 
     @asynccontextmanager
     async def lifespan(app):
@@ -45,17 +58,27 @@ def create_app(store=None, *, database_url=None, worker_id=None, token=None, ttl
             db = Database(database_url or os.getenv("DATABASE_URL", "sqlite:///.spatial-id/state.db"))
             try:
                 await asyncio.to_thread(db.migrate)
-                active = RecordStore(db, worker_id if worker_id is not None else int(os.getenv("WORKER_ID", "0")), ttl_ms=ttl_ms)
-                await asyncio.to_thread(active.acquire)
+                configured_worker = worker_id if worker_id is not None else os.getenv("WORKER_ID", "0")
+                if configured_worker == "auto":
+                    active = await asyncio.to_thread(RecordStore.acquire_available, db, ttl_ms=ttl_ms)
+                else:
+                    fixed_worker = int(configured_worker) if isinstance(configured_worker, str) else configured_worker
+                    active = RecordStore(db, fixed_worker, ttl_ms=ttl_ms)
+                    await asyncio.to_thread(active.acquire)
             except BaseException:
                 db.close()
                 raise
         else:
             active = store
         app.state.store = active
+        app.state.request_log = RequestLog(active.db)
+        stop_cleanup = asyncio.Event()
+        cleanup = asyncio.create_task(app.state.request_log.maintain(stop_cleanup))
         try:
             yield
         finally:
+            stop_cleanup.set()
+            await cleanup
             if owned:
                 await asyncio.to_thread(active.close)
 
@@ -73,9 +96,19 @@ def create_app(store=None, *, database_url=None, worker_id=None, token=None, ttl
     @app.middleware("http")
     async def boundary(request, call_next):
         start = time.monotonic()
-        if api_token and request.url.path not in ("/livez", "/readyz", "/healthz", "/metrics"):
-            supplied = request.headers.get("authorization", "")
-            if not hmac.compare_digest(supplied, f"Bearer {api_token}"):
+        public_asset = frontend and request.method in ("GET", "HEAD") and (
+            request.url.path == "/" or request.url.path.startswith("/assets/"))
+        if request.url.path == operator_path or request.url.path.startswith(operator_path + "/"):
+            if not operator_token or operator_token == api_token:
+                return failure(403, "operator_disabled", "configure a distinct operator token to view request logs")
+            required_token = operator_token
+        elif not public_asset and request.url.path not in ("/livez", "/readyz", "/healthz", "/metrics"):
+            required_token = api_token
+        else:
+            required_token = None
+        if required_token:
+            supplied = request.headers.get("authorization", "").encode()
+            if not hmac.compare_digest(supplied, f"Bearer {required_token}".encode()):
                 return failure(401, "unauthorized", "a valid bearer token is required")
         if app.state.inflight >= 64:
             return failure(503, "overloaded", "server at capacity; retry later")
@@ -110,6 +143,8 @@ def create_app(store=None, *, database_url=None, worker_id=None, token=None, ttl
         requests.labels(getattr(route, "path", "unmatched"), str(response.status_code)).inc()
         response.headers["Cache-Control"] = "no-store"
         return response
+
+    app.add_middleware(VehicleRequestLogging)
 
     for error_class, status, code in [
         (ValidationError, 400, "validation_error"), (MalformedIdError, 400, "validation_error"),
@@ -153,9 +188,15 @@ def create_app(store=None, *, database_url=None, worker_id=None, token=None, ttl
         except (ValueError, UnicodeDecodeError):
             return failure(400, "invalid_json", "expected strict JSON without duplicate fields")
         started_commit = time.monotonic()
+        attempt = request.state.attempt
+        if isinstance(payload, dict) and valid_vehicle_id(payload.get("vehicle_id")):
+            attempt.vehicle_id = payload["vehicle_id"]
         if isinstance(payload, dict) and type(payload.get("count", 1)) is int and payload.get("count", 1) > max_batch:
             raise ValidationError(f"count exceeds configured limit of {max_batch}")
         result, replay = await asyncio.to_thread(app.state.store.generate, payload, request.headers.get("idempotency-key"))
+        attempt.point_ids = (result["ids"][0], result["ids"][-1])
+        attempt.point_count = result["count"]
+        attempt.replayed = replay
         commit.observe(time.monotonic() - started_commit)
         if replay:
             replays.inc(); stats["replays"] += 1
@@ -170,9 +211,11 @@ def create_app(store=None, *, database_url=None, worker_id=None, token=None, ttl
         return result
 
     @app.get("/v1/records/{value}")
-    async def record(value: str):
+    async def record(value: str, request: Request):
         decode(value)
         result = await read_operation(app.state.store.record, value)
+        if result:
+            request.state.attempt.vehicle_id = result.get("vehicle_id")
         return result if result else failure(404, "not_found", "record not found")
 
     @app.get("/v1/vehicles/{vehicle}/records")
@@ -226,6 +269,20 @@ def create_app(store=None, *, database_url=None, worker_id=None, token=None, ttl
                 page = await read_operation(app.state.store.history, vehicle, 1000, page["next_cursor"])
         return StreamingResponse(rows(), media_type="application/x-ndjson", headers={"Content-Disposition": 'attachment; filename="history.jsonl"'})
 
+    @app.get(operator_path)
+    async def request_logs(limit: int = Query(25, ge=1, le=100), cursor: str | None = None,
+                           vehicle_id: str | None = None, status: int | None = Query(None, ge=100, le=599),
+                           request_id: str | None = None,
+                           from_ms: int | None = Query(None, ge=0, le=253402300799999),
+                           to_ms: int | None = Query(None, ge=0, le=253402300799999)):
+        return await read_operation(app.state.request_log.page, limit, cursor, vehicle_id, status,
+                                    request_id, from_ms, to_ms)
+
+    @app.get(operator_path + "/{request_id}/points")
+    async def request_points(request_id: str):
+        items = await read_operation(app.state.request_log.points, request_id)
+        return {"items": items} if items else failure(404, "not_found", "no saved points for this request")
+
     @app.get("/livez")
     async def live():
         return {"status": "alive"}
@@ -246,5 +303,12 @@ def create_app(store=None, *, database_url=None, worker_id=None, token=None, ttl
             return ordered[min(len(ordered)-1, int((len(ordered)-1)*p))]*1000 if ordered else None
         return dict(stats, worker_id=app.state.store.worker_id, uptime_seconds=time.monotonic()-started,
                     latency_ms={"p50": percentile(.5), "p95": percentile(.95), "p99": percentile(.99)})
+
+    if frontend:
+        @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+        async def dashboard():
+            return FileResponse(frontend / "index.html", headers={"Cache-Control": "no-store"})
+
+        app.mount("/assets", StaticFiles(directory=frontend / "assets"), name="dashboard-assets")
 
     return app

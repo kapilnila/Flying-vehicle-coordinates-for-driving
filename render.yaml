@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: spatial-id
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /readyz
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: API_TOKEN
+        generateValue: true
+      - key: OPERATOR_TOKEN
+        generateValue: true
+      - key: WORKER_ID
+        value: auto

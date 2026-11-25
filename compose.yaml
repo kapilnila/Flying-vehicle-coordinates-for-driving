@@ -8,6 +8,7 @@ x-api: &api
   environment: &environment
     DATABASE_URL: postgresql://spatial:${POSTGRES_PASSWORD:-local-test-password}@db:5432/spatial
     API_TOKEN: ${API_TOKEN:-}
+    OPERATOR_TOKEN: ${OPERATOR_TOKEN:-}
   healthcheck:
     test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=2)"]
     interval: 5s

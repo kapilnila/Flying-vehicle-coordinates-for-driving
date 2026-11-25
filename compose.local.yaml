@@ -6,6 +6,7 @@ services:
       DATABASE_URL: sqlite:////data/state.db
       WORKER_ID: '0'
       API_TOKEN: ${API_TOKEN:-}
+      OPERATOR_TOKEN: ${OPERATOR_TOKEN:-}
     volumes: ["local-state:/data"]
     stop_grace_period: 15s
   gateway:

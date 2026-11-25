@@ -29,6 +29,10 @@ class SequenceBusy(Exception):
     pass
 
 
+def valid_vehicle_id(value):
+    return isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", value) is not None
+
+
 def json_text(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
@@ -109,6 +113,14 @@ class Database:
                 "CREATE TABLE IF NOT EXISTS requests (request_key TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, response TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS records (id TEXT PRIMARY KEY, vehicle_id TEXT, captured_at_ms BIGINT NOT NULL, generated_at_ms BIGINT NOT NULL, request_key TEXT NOT NULL REFERENCES requests(request_key), payload TEXT NOT NULL)",
                 "CREATE INDEX IF NOT EXISTS vehicle_history ON records(vehicle_id, captured_at_ms, id)",
+                """CREATE TABLE IF NOT EXISTS request_logs (
+                    request_id TEXT PRIMARY KEY, started_at_ms BIGINT NOT NULL,
+                    method TEXT NOT NULL, route TEXT NOT NULL, status INTEGER NOT NULL,
+                    duration_ms BIGINT NOT NULL, vehicle_id TEXT, point_count INTEGER NOT NULL,
+                    replayed BOOLEAN NOT NULL, first_point TEXT, last_point TEXT)""",
+                "CREATE INDEX IF NOT EXISTS log_time ON request_logs(started_at_ms, request_id)",
+                "CREATE INDEX IF NOT EXISTS log_vehicle ON request_logs(vehicle_id, started_at_ms, request_id)",
+                "CREATE INDEX IF NOT EXISTS log_status ON request_logs(status, started_at_ms, request_id)",
             ]
             for statement in statements:
                 self.execute(c, statement)
@@ -129,6 +141,21 @@ class Database:
 
 
 class RecordStore:
+    @classmethod
+    def acquire_available(cls, db: Database, *, ttl_ms=30000, heartbeat=True):
+        """Claim a free worker using the same fencing and high-water state as fixed workers."""
+        deadline = time.monotonic() + 5
+        for worker_id in range(1024):
+            if time.monotonic() >= deadline:
+                break
+            candidate = cls(db, worker_id, ttl_ms=ttl_ms)
+            try:
+                candidate.acquire(heartbeat=heartbeat)
+                return candidate
+            except WorkerLeaseError:
+                continue
+        raise WorkerLeaseError("no worker lease available within the startup deadline")
+
     def __init__(self, db: Database, worker_id=0, clock=None, ttl_ms=30000):
         if type(worker_id) is not int or not 0 <= worker_id <= 1023:
             raise ValidationError("worker_id must be between 0 and 1023")
@@ -229,7 +256,7 @@ class RecordStore:
         if type(count) is not int or not 1 <= count <= 1000:
             raise ValidationError("count must be between 1 and 1000")
         vehicle = normalized["vehicle_id"]
-        if vehicle is not None and (not isinstance(vehicle, str) or not re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", vehicle)):
+        if vehicle is not None and not valid_vehicle_id(vehicle):
             raise ValidationError("vehicle_id must contain 1 to 128 letters, digits, dots, underscores, colons or hyphens")
         captured = normalized["captured_at_ms"]
         if captured is not None and (type(captured) is not int or not 0 <= captured <= 253402300799999):

@@ -173,6 +173,9 @@ If `API_TOKEN` is configured, enter it in the sidebar. The Test Lab uses a
 separate `TEST_TOKEN` so operational data access and destructive test controls
 can be managed independently.
 
+For a combined Render deployment and a scheduled ten-minute health check, follow
+the [Render deployment guide](docs/render.md).
+
 ## Python library and CLI
 
 Python 3.11 or later is required. The core library has no runtime dependencies.

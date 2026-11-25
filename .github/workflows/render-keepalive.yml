@@ -1,0 +1,25 @@
+name: Render keep-alive
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    if: ${{ vars.RENDER_APP_URL != '' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      RENDER_APP_URL: ${{ vars.RENDER_APP_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Render liveness
+        run: python3 scripts/render_keepalive.py

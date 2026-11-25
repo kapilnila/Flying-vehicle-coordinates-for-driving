@@ -8,6 +8,11 @@ The examples assume `http://localhost:8080`. When `API_TOKEN` is configured,
 send `Authorization: Bearer <token>` on every route except `/livez`, `/readyz`,
 `/healthz`, and `/metrics`. JSON responses include `Cache-Control: no-store`.
 
+With `FRONTEND_DIST` configured, the service also serves the built dashboard at
+`/` and its assets at `/assets/`. These GET/HEAD routes are public. Hosted
+dashboard mode requires `API_TOKEN`; vehicle and statistics routes require it.
+`WORKER_ID=auto` selects an available worker lease during startup.
+
 ## Generate
 
 `POST /v1/ids`, `Content-Type: application/json`, optional `Idempotency-Key`.

@@ -1,0 +1,23 @@
+FROM node:22-alpine AS frontend
+WORKDIR /build/frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+ARG VITE_GOOGLE_MAPS_API_KEY
+ENV VITE_HOSTED_MODE=true
+RUN npm run build
+
+FROM python:3.12-slim
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    FRONTEND_DIST=/app/dashboard \
+    WORKER_ID=auto
+WORKDIR /app
+COPY pyproject.toml README.md ./
+COPY spatial_id ./spatial_id
+RUN pip install --no-cache-dir '.[service,postgres]' \
+    && useradd --create-home --uid 10001 spatialid
+COPY --from=frontend /build/frontend/dist ./dashboard
+USER spatialid
+EXPOSE 8080
+CMD ["python", "-m", "spatial_id.hosted"]
