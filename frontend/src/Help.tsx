@@ -49,7 +49,12 @@ export function Help({navigate}: {navigate: (destination: HelpDestination) => vo
           This reads the device you are using and fills coordinates and capture time. Check its reported accuracy.</li>
         <li><strong>Review the reading and save.</strong> Enter the actual altitude and speed, choose the
           altitude reference, and click Generate IDs. The form’s initial values are examples.
-          For one observation, leave batch size at 1.</li>
+          For one observation, leave batch size at 1. Optionally enable Generate continuously for a time period,
+          choose a duration (for example, 60 seconds) and interval, then select Start timed generation.
+          Each reading saves one ID. Repeat form values keeps the same reading values; Fresh device location
+          refreshes coordinates and capture time, while altitude and speed stay at the reviewed form values.
+          Keep Generate open; Stop generation, navigating away, or the time limit ends the run.
+          Slow requests and browser throttling may reduce the number of readings.</li>
         <li><strong>Retrieve the values.</strong> In History, search the same vehicle ID, open a point’s
           details, or export JSONL. Latest record selects by capture time.</li>
         <li><strong>Follow the vehicle.</strong> In Paths, select Live map and follow its vehicle ID.
